@@ -17,7 +17,7 @@ jobs:
               uses: actions/setup-node@v1
               with:
                 node-version: '12.x'
-            - name: Run app
+            - name: Run jd_daily_egg
               run: npm install
             - run: node jd_daily_egg.js
               env:
