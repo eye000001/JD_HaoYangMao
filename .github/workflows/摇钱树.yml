@@ -1,0 +1,26 @@
+name: 摇钱树
+
+on:
+    push:
+        branches:
+            - master
+    schedule:
+        - cron: '3 */2 * * *'
+jobs:
+    build:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout codes
+              uses: actions/checkout@v2
+            - name: Use Node.js
+              uses: actions/setup-node@v1
+              with:
+                node-version: '12.x'
+            - name: Run jd_moneyTree
+              run: npm install
+            - run: node jd_moneyTree.js
+              env:
+                JD_COOKIE: ${{ secrets.JD_COOKIE }}
+                PUSH_KEY: ${{ secrets.PUSH_KEY }}
+     
