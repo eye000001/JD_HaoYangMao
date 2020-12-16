@@ -3,7 +3,7 @@ const $ = new Env();
 // =======================================微信server酱通知设置区域===========================================
 //此处填你申请的SCKEY.
 //注：此处设置github action用户填写到Settings-Secrets里面(Name输入PUSH_KEY)
-let SCKEY = 'SCU121581T480e23f4cb5d107ac3fb2de50e1e4ce45f9a502147944';
+let SCKEY = '';
 
 // =======================================Bark App通知设置区域===========================================
 //此处填你BarkAPP的信息(IP/设备码，例如：https://api.day.app/XXXXXXXX)

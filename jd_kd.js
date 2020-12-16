@@ -1,37 +1,35 @@
 /*
- * @Author: lxk0301 
- * @Date: 2020-11-03 18:12:38
- * @Last Modified by: lxk0301
- * @Last Modified time: 2020-11-23 12:27:18
-*/
-/*
-京东全民开红包（京东app->主页->领券->抢红包(在底部)）
-已完成功能：
-①浏览活动
-②关注频道
-③领取红包
-未实现功能：
-领3张券功能,邀请好友未实现
+京东快递签到
+活动地址：https://jingcai-h5.jd.com/#/
+签到领豆,14天内满4次和7次享额外奖励，每天运行一次即可
+更新地址：https://raw.githubusercontent.com/lxk0301/jd_scripts/master/jd_kd.js
 
-支持京东双账号
-脚本兼容: QuantumultX, Surge, Loon, JSBox, Node.js
-QuantumultX
+已支持IOS双京东账号, Node.js支持N个京东账号
+脚本兼容: QuantumultX, Surge, Loon, 小火箭，JSBox, Node.js
+============Quantumultx===============
 [task_local]
-#京东全民开红包
-1 1 * * * https://raw.githubusercontent.com/lxk0301/jd_scripts/master/jd_redPacket.js, tag=京东全民开红包, img-url=https://raw.githubusercontent.com/58xinian/icon/master/jd_redPacket.png, enabled=true
-Loon
+#京东快递签到
+10 0 * * * https://raw.githubusercontent.com/lxk0301/jd_scripts/master/jd_kd.js, tag=京东快递签到, img-url=https://raw.githubusercontent.com/58xinian/icon/master/jd_kd.png, enabled=true
+
+================Loon==============
 [Script]
-cron "1 1 * * *" script-path=https://raw.githubusercontent.com/lxk0301/jd_scripts/master/jd_redPacket.js, tag=京东全民开红包
-Surge
-京东全民开红包 = type=cron,cronexp=1 1 * * *,wake-system=1,timeout=20,script-path=https://raw.githubusercontent.com/lxk0301/jd_scripts/master/jd_redPacket.js
+cron "10 0 * * *" script-path=https://raw.githubusercontent.com/lxk0301/jd_scripts/master/jd_kd.js, tag=京东快递签到
+
+===============Surge=================
+京东快递签到 = type=cron,cronexp="10 0 * * *",wake-system=1,timeout=20,script-path=https://raw.githubusercontent.com/lxk0301/jd_scripts/master/jd_kd.js
+
+============小火箭=========
+京东快递签到 = type=cron,script-path=https://raw.githubusercontent.com/lxk0301/jd_scripts/master/jd_kd.js, cronexpr="10 0 * * *", timeout=200, enable=true
  */
-const $ = new Env('京东全民开红包');
+const $ = new Env('京东快递签到');
+
 const notify = $.isNode() ? require('./sendNotify') : '';
 //Node.js用户请在jdCookie.js处填写京东ck;
 const jdCookieNode = $.isNode() ? require('./jdCookie.js') : '';
-
+let jdNotify = true;//是否关闭通知，false打开通知推送，true关闭通知推送
+const randomCount = $.isNode() ? 20 : 5;
 //IOS等用户直接用NobyDa的jd cookie
-let cookiesArr = [], cookie = '';
+let cookiesArr = [], cookie = '', message;
 if ($.isNode()) {
   Object.keys(jdCookieNode).forEach((item) => {
     cookiesArr.push(jdCookieNode[item])
@@ -45,10 +43,7 @@ if ($.isNode()) {
   cookiesArr.push(...[$.getdata('CookieJD2'), $.getdata('CookieJD')]);
   cookiesArr.reverse();
 }
-
 const JD_API_HOST = 'https://api.m.jd.com/api';
-
-
 !(async () => {
   if (!cookiesArr[0]) {
     $.msg($.name, '【提示】请先获取京东账号一cookie\n直接使用NobyDa的京东签到获取', 'https://bean.m.jd.com/', {"open-url": "https://bean.m.jd.com/"});
@@ -61,8 +56,9 @@ const JD_API_HOST = 'https://api.m.jd.com/api';
       $.index = i + 1;
       $.isLogin = true;
       $.nickName = '';
+      message = '';
       await TotalBean();
-      console.log(`\n开始【京东账号${$.index}】${$.nickName || $.UserName}\n`);
+      console.log(`\n******开始【京东账号${$.index}】${$.nickName || $.UserName}*********\n`);
       if (!$.isLogin) {
         $.msg($.name, `【提示】cookie已失效`, `京东账号${$.index} ${$.nickName || $.UserName}\n请重新登录获取\nhttps://bean.m.jd.com/`, {"open-url": "https://bean.m.jd.com/"});
 
@@ -73,8 +69,7 @@ const JD_API_HOST = 'https://api.m.jd.com/api';
         }
         continue
       }
-      $.discount = 0;
-      await redPacket();
+      await userSignIn();
       await showMsg();
     }
   }
@@ -86,180 +81,72 @@ const JD_API_HOST = 'https://api.m.jd.com/api';
       $.done();
     })
 
-async function redPacket() {
-  const response = await taskHomePage();
-  if (response.code === 0) {
-    $.taskInfo = response.data.result.taskInfos;
-    if ($.taskInfo && $.taskInfo.length > 0) {
-      console.log(`    任务     状态  红包是否领取`);
-      for (let item of $.taskInfo) {
-        console.log(`${item.title.slice(-6)}   ${item.alreadyReceivedCount ? item.alreadyReceivedCount: 0}/${item.requireCount}      ${item.innerStatus === 4 ? '是':'否'}`)
-      }
-      for (let item of $.taskInfo) {
-        //innerStatus=4已领取红包，3：任务已完成，红包未领取，2：任务未完成，7,未领取任务
-        if (item.innerStatus === 4) {
-          console.log(`[${item.title}] 已经领取奖励`)
-        } else if (item.innerStatus === 3) {
-          await receiveTaskRedpacket(item.taskType);
-        } else if (item.innerStatus !== 4) {
-          await startTask(item.taskType);
-          if (item.taskType !== 0) {
-            console.log(`开始做浏览任务\n`);
-            await active(item.taskType);
-            await receiveTaskRedpacket(item.taskType);
-          } else {
-            //TODO 领3张优惠券
-            console.log(`[${item.title}] 任务未开发`)
-          }
-        }
-      }
-    }
-  }
-}
-
-//获取任务列表
-function taskHomePage() {
-  return new Promise((resolve) => {
-    $.post(taskUrl(arguments.callee.name.toString(), {"clientInfo":{}}), (err, resp, data) => {
-      try {
-        if (err) {
-          console.log(`\n${$.name}: API查询请求失败 ‼️‼️`);
-          console.log(JSON.stringify(err));
-        } else {
-          data = JSON.parse(data);
-        }
-      } catch (e) {
-        $.logErr(e, resp);
-      } finally {
-        resolve(data);
-      }
-    })
-  })
-}
-//领取任务
-function startTask(taskType) {
-  // 从taskHomePage返回的数据里面拿taskType
-  const data = {"clientInfo":{}, taskType};
-  return new Promise((resolve) => {
-    $.post(taskUrl(arguments.callee.name.toString(), data), (err, resp, data) => {
-      try {
-        if (err) {
-          console.log(`\n${$.name}: API查询请求失败 ‼️‼️`);
-          console.log(JSON.stringify(err));
-        } else {
-          data = JSON.parse(data);
-        }
-      } catch (e) {
-        $.logErr(e, resp);
-      } finally {
-        resolve(data);
-      }
-    })
-  })
-}
-
-async function active(taskType) {
-  const getTaskDetailForColorRes = await getTaskDetailForColor(taskType);
-  if (getTaskDetailForColorRes && getTaskDetailForColorRes.code === 0) {
-    if (getTaskDetailForColorRes.data && getTaskDetailForColorRes.data.result) {
-      const { advertDetails } = getTaskDetailForColorRes.data.result;
-      for (let item of advertDetails) {
-        await $.wait(1000);
-        if (item.id && item.status == 0) {
-          let taskReportForColorRes = await taskReportForColor(taskType, item.id);
-          // console.log(`完成任务的动作---${JSON.stringify(taskReportForColorRes)}`)
-        }
-      }
-    } else {
-      console.log(`任务列表为空,手动进入app内检查 是否存在[从京豆首页进领券中心逛30秒]的任务,如存在,请手动完成再运行脚本`)
-      $.msg(`${$.name}`, '', '手动进入app内检查\n是否存在[从京豆首页进领券中心逛30秒]的任务\n如存在,请手动完成再运行脚本');
-      if ($.isNode()) await notify.sendNotify(`${$.name} - 账号${$.index} - ${$.nickName}`, `执行脚本出现异常\n请手动进入app内检查\n是否存在[从京豆首页进领券中心逛30秒]的任务\n如存在,请手动完成再运行脚本`)
-    }
-  } else {
-    console.log(`---具体任务详情---${JSON.stringify(getTaskDetailForColorRes)}`);
-  }
-}
-
-//获取具体任务详情
-function getTaskDetailForColor(taskType) {
-  const data = {"clientInfo":{}, taskType};
-  return new Promise((resolve) => {
-    $.post(taskUrl(arguments.callee.name.toString(), data), (err, resp, data) => {
-      try {
-        if (err) {
-          console.log(`\n${$.name}: API查询请求失败 ‼️‼️`);
-          console.log(JSON.stringify(err));
-        } else {
-          data = JSON.parse(data);
-        }
-      } catch (e) {
-        $.logErr(e, resp);
-      } finally {
-        resolve(data);
-      }
-    })
-  })
-}
-//完成任务的动作
-function taskReportForColor(taskType, detailId) {
-  const data = {"clientInfo":{}, taskType, detailId};
-  //console.log(`活动id：：：${detailId}\n`)
-  return new Promise((resolve) => {
-    $.post(taskUrl(arguments.callee.name.toString(), data), (err, resp, data) => {
-      try {
-        if (err) {
-          console.log(`\n${$.name}: API查询请求失败 ‼️‼️`);
-          console.log(JSON.stringify(err));
-        } else {
-          data = JSON.parse(data);
-        }
-      } catch (e) {
-        $.logErr(e, resp);
-      } finally {
-        resolve(data);
-      }
-    })
-  })
-}
-//领取 领3张券任务后的红包
-function receiveTaskRedpacket(taskType) {
-  const body = {"clientInfo":{}, taskType};
-  return new Promise((resolve) => {
-    $.post(taskUrl(arguments.callee.name.toString(), body), (err, resp, data) => {
-      try {
-        if (err) {
-          console.log(`\n${$.name}: API查询请求失败 ‼️‼️`);
-          console.log(JSON.stringify(err));
-        } else {
-          data = JSON.parse(data);
-          if (data.data.success && data.data.biz_code === 0) {
-            $.discount += Number(data.data.result.discount);
-          }
-        }
-      } catch (e) {
-        $.logErr(e, resp);
-      } finally {
-        resolve(data);
-      }
-    })
-  })
-}
 function showMsg() {
-  console.log(`${$.name}获得红包：${$.discount}元`);
+  return new Promise(resolve => {
+    $.msg($.name, '', `【京东账号${$.index}】${$.nickName}\n${message}`);
+    resolve()
+  })
 }
-// function newReceiveRvcCouponWithTask() {
-//   const data = {"taskType":"0","extend":"","source":"couponCenter_app","pageClickKey":"CouponCenter","rcType":"1","taskId":"415","childActivityUrl":"","eid":"","shshshfpb":"","lat":"","lng":""};
-//   request(arguments.callee.name.toString(), data).then((response) => {
-//     try {
-//       // taskInfo = res.data.result.taskInfos;
-//       console.log(`领券结果:${JSON.stringify(response)}`);
-//       step.next();
-//     } catch (e) {
-//       console.log(e);
-//       console.log('初始化任务异常');
-//     }
-//   })
-// }
+function userSignIn() {
+  return new Promise(resolve => {
+    $.post(taskUrl(), (err, resp, data) => {
+      try {
+        if (err) {
+          console.log(`${JSON.stringify(err)}`)
+          console.log(resp)
+          console.log(`${$.name} API请求失败，请检查网路重试`)
+        } else {
+          if (safeGet(data)) {
+            data = JSON.parse(data);
+            if (data.code === 1) {
+              console.log(`今日签到成功，获得${data.content[0].title}`)
+              message += `今日签到成功，获得${data.content[0].title} 🐶\n`;
+
+            } else if (data.code === -1) {
+              console.log(`今日已签到`)
+              message += `【签到】失败，今日已签到`;
+            } else {
+              console.log(`异常：${JSON.stringify(data)}`)
+            }
+          }
+        }
+      } catch (e) {
+        $.logErr(e, resp)
+      } finally {
+        resolve();
+      }
+    })
+  })
+}
+function taskUrl() {
+  return {
+    url: `https://lop-proxy.jd.com/jiFenApi/signInAndGetReward`,
+    body: '[{"userNo":"$cooMrdGatewayUid$"}]',
+    headers: {
+      'Host': 'lop-proxy.jd.com',
+      'lop-dn': 'jingcai.jd.com',
+      'biz-type': 'service-monitor',
+      'app-key': 'jexpress',
+      'access': 'H5',
+      'content-type': 'application/json;charset=utf-8',
+      'clientinfo': '{"appName":"jingcai","client":"m"}',
+      'accept': 'application/json, text/plain, */*',
+      'jexpress-report-time': '1607330170578',
+      'x-requested-with': 'XMLHttpRequest',
+      'source-client': '2',
+      'appparams': '{"appid":158,"ticket_type":"m"}',
+      'version': '1.0.0',
+      'origin': 'https://jingcai-h5.jd.com',
+      'sec-fetch-site': 'same-site',
+      'sec-fetch-mode': 'cors',
+      'sec-fetch-dest': 'empty',
+      'referer': 'https://jingcai-h5.jd.com/',
+      'accept-language': 'zh-CN,zh;q=0.9',
+      "Cookie": cookie,
+      "User-Agent": $.isNode() ? (process.env.JD_USER_AGENT ? process.env.JD_USER_AGENT : "jdapp;iPhone;9.2.2;14.2;%E4%BA%AC%E4%B8%9C/9.2.2 CFNetwork/1206 Darwin/20.1.0") : ($.getdata('JDUA') ? $.getdata('JDUA') : "jdapp;iPhone;9.2.2;14.2;%E4%BA%AC%E4%B8%9C/9.2.2 CFNetwork/1206 Darwin/20.1.0"),
+    }
+  }
+}
 function TotalBean() {
   return new Promise(async resolve => {
     const options = {
@@ -300,24 +187,15 @@ function TotalBean() {
     })
   })
 }
-
-function taskUrl(function_id, body) {
-  return {
-    url: `${JD_API_HOST}?appid=jd_mp_h5&functionId=${function_id}&loginType=2&client=jd_mp_h5&t=${new Date().getTime()*1000}`,
-    body: `body=${JSON.stringify(body)}`,
-    headers: {
-      "Host": "api.m.jd.com",
-      "Content-Type": "application/x-www-form-urlencoded",
-      "Origin": "https://happy.m.jd.com",
-      "Accept-Encoding": "gzip, deflate, br",
-      "Cookie": cookie,
-      "Connection": "keep-alive",
-      "Accept": "*/*",
-      "User-Agent": $.isNode() ? (process.env.JD_USER_AGENT ? process.env.JD_USER_AGENT : "jdapp;iPhone;9.2.2;14.2;%E4%BA%AC%E4%B8%9C/9.2.2 CFNetwork/1206 Darwin/20.1.0") : ($.getdata('JDUA') ? $.getdata('JDUA') : "jdapp;iPhone;9.2.2;14.2;%E4%BA%AC%E4%B8%9C/9.2.2 CFNetwork/1206 Darwin/20.1.0"),
-      "Referer": "https://happy.m.jd.com/babelDiy/zjyw/3ugedFa7yA6NhxLN5gw2L3PF9sQC/index.html",
-      "Content-Length": "36",
-      "Accept-Language": "zh-cn"
+function safeGet(data) {
+  try {
+    if (typeof JSON.parse(data) == "object") {
+      return true;
     }
+  } catch (e) {
+    console.log(e);
+    console.log(`京东服务器访问数据为空，请检查自身设备网络情况`);
+    return false;
   }
 }
 function jsonParse(str) {

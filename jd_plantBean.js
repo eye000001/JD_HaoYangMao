@@ -89,14 +89,14 @@ async function jdPlantBean() {
   if ($.plantBeanIndexResult.code === '0') {
     const shareUrl = $.plantBeanIndexResult.data.jwordShareInfo.shareUrl
     $.myPlantUuid = getParam(shareUrl, 'plantUuid')
-    console.log(`\n【您的互助码plantUuid】 ${$.myPlantUuid}\n`);
+    console.log(`\n【您的${$.name}互助码】 ${$.myPlantUuid}\n`);
     roundList = $.plantBeanIndexResult.data.roundList;
     currentRoundId = roundList[1].roundId;//本期的roundId
     lastRoundId = roundList[0].roundId;//上期的roundId
     awardState = roundList[0].awardState;
     $.taskList = $.plantBeanIndexResult.data.taskList;
     subTitle = `【京东昵称】${$.plantBeanIndexResult.data.plantUserInfo.plantNickName}`;
-    message += `【上期时间】${roundList[0].dateDesc}\n`;
+    message += `【上期时间】${roundList[0].dateDesc.replace('上期 ', '')}\n`;
     message += `【上期成长值】${roundList[0].growth}\n`;
     await receiveNutrients();//定时领取营养液
     await doHelp();//助力
@@ -501,7 +501,7 @@ async function plantBeanIndex() {
   $.plantBeanIndexResult = await request('plantBeanIndex');//plantBeanIndexBody
 }
 function readShareCode() {
-  return new Promise(resolve => {
+  return new Promise(async resolve => {
     $.get({url: `http://api.turinglabs.net/api/v1/jd/bean/read/${randomCount}/`}, (err, resp, data) => {
       try {
         if (err) {
@@ -519,6 +519,8 @@ function readShareCode() {
         resolve(data);
       }
     })
+    await $.wait(15000);
+    resolve()
   })
 }
 //格式化助力码

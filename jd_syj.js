@@ -40,7 +40,12 @@ if ($.isNode()) {
   })
   if (process.env.JD_DEBUG && process.env.JD_DEBUG === 'false') console.log = () => {};
 } else {
-  cookiesArr.push(...[$.getdata('CookieJD'), $.getdata('CookieJD2')]);
+  let cookiesData = $.getdata('CookiesJD') || "[]";
+  cookiesData = jsonParse(cookiesData);
+  cookiesArr = cookiesData.map(item => item.cookie);
+  cookiesArr.reverse();
+  cookiesArr.push(...[$.getdata('CookieJD2'), $.getdata('CookieJD')]);
+  cookiesArr.reverse();
 }
 const JD_API_HOST = 'https://api.m.jd.com/api';
 !(async () => {
@@ -86,10 +91,11 @@ function showMsg() {
     resolve()
   })
 }
+let signFlag = 0;
 function userSignIn() {
   return new Promise(resolve => {
     const body = {"activityId":"8d6845fe2e77425c82d5078d314d33c5","inviterId":"VMIQlLQqjQyjZokQmv5bIDgq011L0Ov8","channel":"MiniProgram"};
-    $.get(taskUrl('userSignIn', body), (err, resp, data) => {
+    $.get(taskUrl('userSignIn', body), async (err, resp, data) => {
       try {
         if (err) {
           console.log(`${JSON.stringify(err)}`)
@@ -98,7 +104,8 @@ function userSignIn() {
           if (safeGet(data)) {
             data = JSON.parse(data);
             if (data.code === 0) {
-              console.log(`今日签到成功`)
+              signFlag = 0;
+              console.log(`${$.name}今日签到成功`);
               if (data.data) {
                 let { alreadySignDays, beanTotalNum, todayPrize, eachDayPrize } = data.data;
                 message += `【第${alreadySignDays}日签到】成功，获得${todayPrize.beanAmount}京豆 🐶\n`;
@@ -109,6 +116,13 @@ function userSignIn() {
             } else if (data.code === 81) {
               console.log(`今日已签到`)
               message += `【签到】失败，今日已签到`;
+            } else if (data.code === 6) {
+              //此处有时会遇到 服务器繁忙 导致签到失败,故重复三次签到
+              $.log(`${$.name}签到失败${signFlag}:${data.msg}`);
+              if (signFlag < 3) {
+                signFlag ++;
+                await userSignIn();
+              }
             } else {
               console.log(`异常：${JSON.stringify(data)}`)
             }
@@ -187,6 +201,17 @@ function safeGet(data) {
     console.log(e);
     console.log(`京东服务器访问数据为空，请检查自身设备网络情况`);
     return false;
+  }
+}
+function jsonParse(str) {
+  if (typeof str == "string") {
+    try {
+      return JSON.parse(str);
+    } catch (e) {
+      console.log(e);
+      $.msg($.name, '', '请勿随意在BoxJs输入框修改内容\n建议通过脚本去获取cookie')
+      return [];
+    }
   }
 }
 // prettier-ignore
